@@ -13,6 +13,9 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <omp.h>
+
+int num_threads = 16; // Default to 4 threads
 
 /* ---------- util CSV 1D: cada linha tem 1 número ---------- */
 static int count_rows(const char *path){
@@ -81,6 +84,7 @@ static void write_centroids_csv(const char *path, const double *C, int K){
 /* assignment: para cada X[i], encontra c com menor (X[i]-C[c])^2 */
 static double assignment_step_1d(const double *X, const double *C, int *assign, int N, int K){
     double sse = 0.0;
+    #pragma omp set_num_threads(num_threads)  // Set to 4 threads (or any number you want)
     #pragma omp parallel for reduction(+:sse)
     for(int i=0;i<N;i++){
         int best = -1;
@@ -98,7 +102,7 @@ static double assignment_step_1d(const double *X, const double *C, int *assign, 
 
 /* update: média dos pontos de cada cluster (1D)
    se cluster vazio, copia X[0] (estratégia naive) */
-static void update_step_1d(const double *X, double *C, const int *assign, int N, int K){
+static void update_step_1d2(const double *X, double *C, const int *assign, int N, int K){
     double *sum = (double*)calloc((size_t)K, sizeof(double));
     int *cnt = (int*)calloc((size_t)K, sizeof(int));
     if(!sum || !cnt){ fprintf(stderr,"Sem memoria no update\n"); exit(1); }
@@ -111,6 +115,36 @@ static void update_step_1d(const double *X, double *C, const int *assign, int N,
     for(int c=0;c<K;c++){
         if(cnt[c] > 0) C[c] = sum[c] / (double)cnt[c];
         else           C[c] = X[0]; /* simples: cluster vazio recebe o primeiro ponto */
+    }
+    free(sum); free(cnt);
+}
+
+
+static void update_step_1d(const double *X, double *C, const int *assign, int N, int K){
+    
+    // Acumuladores globais, onde ocorrerá a condição de corrida
+    double *sum = (double *)calloc((size_t)K, sizeof(double));
+    int *cnt = (int *)calloc((size_t)K, sizeof(int));
+    if(!sum || !cnt){ fprintf(stderr,"Sem memoria no update\n"); exit(1); }
+
+    // PRAGMA 2: Paraleliza o laço i=0..N-1
+    #pragma omp parallel for
+    for(int i=0;i<N;i++){
+        int a = assign[i];
+
+        // PRAGMA CRITICAL: Protege o acesso aos acumuladores globais sum[a] e cnt[a].
+        // APENAS UMA THREAD por vez pode entrar e executar este bloco.
+        #pragma omp critical
+        {
+            cnt[a] += 1;
+            sum[a] += X[i];
+        }
+    }
+    
+    // Cálculo final da média (Serial)
+    for(int c=0;c<K;c++){
+        if(cnt[c] > 0) C[c] = sum[c] / (double)cnt[c];
+        else           C[c] = X[0]; // Estratégia "naive" para cluster vazio
     }
     free(sum); free(cnt);
 }
@@ -143,10 +177,11 @@ int main(int argc, char **argv){
     }
     const char *pathX = argv[1];
     const char *pathC = argv[2];
-    int max_iter = (argc>3)? atoi(argv[3]) : 50;
-    double eps   = (argc>4)? atof(argv[4]) : 1e-4;
-    const char *outAssign   = (argc>5)? argv[5] : NULL;
-    const char *outCentroid = (argc>6)? argv[6] : NULL;
+    num_threads = atoi(argv[3]); // Default to 4 threads if not provided
+    int max_iter = (argc>4)? atoi(argv[4]) : 50;
+    double eps   = (argc>5)? atof(argv[5]) : 1e-4;
+    const char *outAssign   = (argc>6)? argv[6] : NULL;
+    const char *outCentroid = (argc>7)? argv[7] : NULL;
 
     if(max_iter <= 0 || eps <= 0.0){
         fprintf(stderr,"Parâmetros inválidos: max_iter>0 e eps>0\n");
@@ -168,6 +203,7 @@ int main(int argc, char **argv){
     printf("K-means 1D (naive)\n");
     printf("N=%d K=%d max_iter=%d eps=%g\n", N, K, max_iter, eps);
     printf("Iteracoes: %d | SSE final: %.6f | Tempo: %.1f ms\n", iters, sse, ms);
+    printf("Using %d threads\n", num_threads);
 
     write_assign_csv(outAssign, assign, N);
     write_centroids_csv(outCentroid, C, K);
