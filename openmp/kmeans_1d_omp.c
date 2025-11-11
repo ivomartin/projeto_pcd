@@ -1,12 +1,3 @@
-/* kmeans_1d_omp.c
-   K-means 1D (C99 + OpenMP), implementação "naive" paralelizada.
-   - Baseado na versão sequencial fornecida no projeto.
-   - Paraleliza os passos de 'assignment' e 'update' com OpenMP.
-
-   Compilar: gcc -O2 -std=c99 -fopenmp kmeans_1d_omp.c -o kmeans_1d_omp -lm
-   Uso:      OMP_NUM_THREADS=4 ./kmeans_1d_omp dados.csv centroides_iniciais.csv [max_iter=50] [eps=1e-4] [assign.csv] [centroids.csv]
-*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,7 +5,6 @@
 #include <time.h>
 #include <omp.h> // Header para OpenMP
 
-/* ---------- util CSV 1D: cada linha tem 1 número (sem alterações) ---------- */
 static int count_rows(const char *path){
     FILE *f = fopen(path, "r");
     if(!f){ fprintf(stderr,"Erro ao abrir %s\n", path); exit(1); }
@@ -76,7 +66,6 @@ static void write_centroids_csv(const char *path, const double *C, int K){
     fclose(f);
 }
 
-/* ---------- k-means 1D (versão OpenMP) ---------- */
 
 /**
  * @brief Passo de atribuição (assignment) paralelizado com OpenMP.
@@ -91,20 +80,6 @@ static void write_centroids_csv(const char *path, const double *C, int K){
 static double assignment_step_1d(const double *X, const double *C, int *assign, int N, int K){
     double sse = 0.0;
 
-    // JUSTIFICATIVA DE PARALELIZAÇÃO:
-    // O loop principal itera sobre todos os pontos de dados 'X'. A atribuição de
-    // um ponto 'X[i]' a um cluster é uma operação totalmente independente das
-    // outras. Cada thread pode, portanto, calcular o centróide mais próximo
-    // para um subconjunto de pontos sem precisar de comunicação ou sincronização
-    // com outras threads durante o cálculo.
-    //
-    // CLÁUSULA REDUCTION:
-    // A variável 'sse' é um acumulador global. Para evitar uma condição de corrida
-    // onde múltiplas threads tentam atualizar 'sse' simultaneamente, usamos a
-    // cláusula `reduction(+:sse)`. O OpenMP cria uma cópia local de 'sse' para
-    // cada thread, que acumula os erros localmente. Ao final da região paralela,
-    // os valores de todas as cópias locais são somados (reduzidos) de forma
-    // segura e atômica ao 'sse' global.
     #pragma omp parallel for reduction(+:sse)
     for(int i=0;i<N;i++){
         int best = -1;
@@ -135,22 +110,7 @@ static void update_step_1d(const double *X, double *C, const int *assign, int N,
     int *cnt = (int*)calloc((size_t)K, sizeof(int));
     if(!sum || !cnt){ fprintf(stderr,"Sem memoria no update\n"); exit(1); }
 
-    // JUSTIFICATIVA DE PARALELIZAÇÃO:
-    // Este loop, assim como no 'assignment', itera sobre todos os pontos 'X'.
-    // A tarefa de cada iteração é acumular a soma e a contagem para o cluster
-    // ao qual o ponto foi atribuído. Esta é outra operação "embaraçosamente paralela".
-    //
-    // CLÁUSULAS ATOMIC:
-    // Diferente da etapa de 'assignment', aqui temos atualizações em posições
-    // aleatórias dos arrays 'sum' e 'cnt'. Se duas threads processarem pontos
-    // que pertencem ao mesmo cluster 'a', elas tentarão modificar `sum[a]` e
-    // `cnt[a]` ao mesmo tempo, criando uma condição de corrida.
-    // A diretiva `#pragma omp atomic` garante que a operação de atualização
-    // (ex: `cnt[a] += 1`) seja executada de forma atômica, ou seja, sem que
-    // outra thread possa interrompê-la. Isso é mais eficiente do que usar
-    // uma seção 'critical' para todo o bloco, pois permite que threads que
-    // atualizam clusters diferentes trabalhem em paralelo.
-    #pragma omp parallel for
+    #pragma omp parallel for num_threads(num_threads)
     for(int i=0;i<N;i++){
         int a = assign[i];
         #pragma omp atomic
@@ -170,7 +130,6 @@ static void update_step_1d(const double *X, double *C, const int *assign, int N,
     free(sum); free(cnt);
 }
 
-/* ---------- Função principal do K-means (sem alterações) ---------- */
 static void kmeans_1d(const double *X, double *C, int *assign,
                       int N, int K, int max_iter, double eps,
                       int *iters_out, double *sse_out)
@@ -191,7 +150,6 @@ static void kmeans_1d(const double *X, double *C, int *assign,
     *sse_out = sse;
 }
 
-/* ---------- main (sem alterações, exceto pelo print) ---------- */
 int main(int argc, char **argv){
     if(argc < 3){
         printf("Uso: %s dados.csv centroides_iniciais.csv [max_iter=50] [eps=1e-4] [assign.csv] [centroids.csv]\n", argv[0]);
@@ -216,14 +174,12 @@ int main(int argc, char **argv){
     int *assign = (int*)malloc((size_t)N * sizeof(int));
     if(!assign){ fprintf(stderr,"Sem memoria para assign\n"); free(X); free(C); return 1; }
 
-    // Usamos omp_get_wtime() para medição de tempo em paralelo
     double t0 = omp_get_wtime();
     int iters = 0; double sse = 0.0;
     kmeans_1d(X, C, assign, N, K, max_iter, eps, &iters, &sse);
     double t1 = omp_get_wtime();
     double ms = 1000.0 * (t1 - t0);
 
-    // Identifica a versão OpenMP no output
     printf("\nK-means 1D (OpenMP)\n");
     printf("N=%d K=%d max_iter=%d eps=%g threads=%d\n", N, K, max_iter, eps, omp_get_max_threads());
     printf("Iterações: %d | SSE final: %.6f | Tempo: %.1f ms\n", iters, sse, ms);
