@@ -4,7 +4,7 @@
 #include <math.h>
 #include <mpi.h>
 
-// --- Funções de Leitura ---
+// reading function
 static double *read_csv(const char *path, int *n_out){
     FILE *f = fopen(path, "r");
     if(!f) return NULL;
@@ -21,14 +21,14 @@ static double *read_csv(const char *path, int *n_out){
     *n_out = r;
     return A;
 }
-
+// writing function
 static void write_csv(const char *path, const int *data, int N){
     FILE *f = fopen(path, "w");
     if(!f) return;
     for(int i=0; i<N; i++) fprintf(f, "%d\n", data[i]);
     fclose(f);
 }
-
+//writing centroids
 static void write_centroids(const char *path, const double *C, int K){
     FILE *f = fopen(path, "w");
     if(!f) return;
@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
+    MPI_Comm_size(MPI_COMM_WORLD, &size); // MPI FUNCTIONS
 
     int N = 0, K = 0;
     double *X_full = NULL;
@@ -49,7 +49,7 @@ int main(int argc, char **argv) {
     int max_iter = 50;
     double eps = 1e-4;
 
-    // --- MESTRE (Rank 0) LÊ TUDO ---
+    // if rank = 0 reads all
     if (rank == 0) {
         if(argc < 3) { 
             fprintf(stderr, "Uso: %s dados.csv centroides.csv\n", argv[0]); 
@@ -62,20 +62,19 @@ int main(int argc, char **argv) {
             fprintf(stderr, "Erro ao ler arquivos CSV (Rank 0)\n");
             MPI_Abort(MPI_COMM_WORLD, 1);
         }
-        // printf("Mestre: Lido N=%d, K=%d\n", N, K);
     }
 
-    // --- COMUNICAÇÃO DE DADOS INICIAIS ---
+    // --- initial data commun ---
     MPI_Bcast(&N, 1, MPI_INT, 0, MPI_COMM_WORLD);
     MPI_Bcast(&K, 1, MPI_INT, 0, MPI_COMM_WORLD);
     
-    // Todos alocam espaço para centróides
+    // centroid allocation
     if(rank != 0) C = (double*)malloc(K * sizeof(double));
     
-    // Mestre envia centróides para todos
+    // sending centroids to everyone
     MPI_Bcast(C, K, MPI_DOUBLE, 0, MPI_COMM_WORLD);
 
-    // --- DISTRIBUIÇÃO DOS PONTOS (SCATTER) ---
+    // points
     int local_N = N / size;
     int remainder = N % size;
     int *sendcounts = NULL; 
@@ -97,12 +96,12 @@ int main(int argc, char **argv) {
     double *local_X = (double*)malloc(my_count * sizeof(double));
     int *local_assign = (int*)malloc(my_count * sizeof(int));
 
-    // Espalha os dados
+    // sends data
     MPI_Scatterv(X_full, sendcounts, displs, MPI_DOUBLE, 
                  local_X, my_count, MPI_DOUBLE, 
                  0, MPI_COMM_WORLD);
 
-    // Buffers auxiliares
+    // aux buffers
     double *local_sum = (double*)malloc(K * sizeof(double));
     int *local_cnt = (int*)malloc(K * sizeof(int));
     double *global_sum = (double*)malloc(K * sizeof(double));
@@ -115,10 +114,8 @@ int main(int argc, char **argv) {
 
     for(it = 0; it < max_iter; it++) {
         double local_sse = 0.0;
-        // Zera acumuladores
         for(int j=0; j<K; j++) { local_sum[j]=0.0; local_cnt[j]=0; }
 
-        // 1. Assignment Local
         for(int i=0; i<my_count; i++) {
             double val = local_X[i];
             int best_c = 0;
@@ -134,22 +131,19 @@ int main(int argc, char **argv) {
             local_cnt[best_c]++;
         }
 
-        // 2. Redução Global (MPI_Allreduce)
         MPI_Allreduce(&local_sse, &global_sse, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
         MPI_Allreduce(local_sum, global_sum, K, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
         MPI_Allreduce(local_cnt, global_cnt, K, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
 
-        // 3. Atualiza Centróides (Todos calculam igual)
         for(int c=0; c<K; c++) {
             if(global_cnt[c] > 0) C[c] = global_sum[c] / global_cnt[c];
         }
 
-        // Convergência
         if(fabs(global_sse - prev_sse) < eps) { it++; break; }
         prev_sse = global_sse;
     }
 
-    // --- RECOLHER RESULTADOS (GATHER) ---
+    // gather results
     int *final_assign = NULL;
     if(rank == 0) final_assign = (int*)malloc(N * sizeof(int));
 
@@ -157,7 +151,7 @@ int main(int argc, char **argv) {
                 final_assign, sendcounts, displs, MPI_INT,
                 0, MPI_COMM_WORLD);
 
-    // --- OUTPUT ---
+    // output
     if (rank == 0) {
         printf("Fim: %d iterações, SSE=%.4f, Tempo=%.4fs\n", it, global_sse, MPI_Wtime()-start);
         write_csv("assign.csv", final_assign, N);
@@ -169,6 +163,6 @@ int main(int argc, char **argv) {
     free(C); free(local_X); free(local_assign);
     free(local_sum); free(local_cnt); free(global_sum); free(global_cnt);
 
-    MPI_Finalize();
+    MPI_Finalize(); //ends
     return 0;
 }

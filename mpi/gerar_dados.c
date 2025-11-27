@@ -17,13 +17,12 @@ int main(int argc, char **argv) {
 
     // Se N ou K forem 0 (erro de argumento), avisa
     if (N <= 0 || K <= 0) {
-        // Silencioso para não poluir o terminal se chamado errado, mas não gera nada
         return 0; 
     }
 
     srand(42); 
 
-    // 1. DADOS
+    // 1. data
     FILE *f_data = fopen("dados.csv", "w");
     if(!f_data) return 1;
     for (int i = 0; i < N; i++) {
@@ -33,7 +32,7 @@ int main(int argc, char **argv) {
     fclose(f_data);
     printf("Gerado: dados.csv (%d linhas) ", N);
 
-    // 2. CENTRÓIDES
+    // 2. centroids
     FILE *f_cent = fopen("centroides_iniciais.csv", "w");
     if(!f_cent) return 1;
     for (int i = 0; i < K; i++) {
