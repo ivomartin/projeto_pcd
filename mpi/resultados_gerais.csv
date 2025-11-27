@@ -1,0 +1,4 @@
+Cenario,N,K,Processos,Iteracoes,SSE_Final,Tempo_s
+Pequeno,10000,4,4,3,3430353.1045,0.0001
+Medio,100000,8,4,14,18616319.8732,0.0018
+Grande,1000000,16,4,17,266064998.6575,0.0385
