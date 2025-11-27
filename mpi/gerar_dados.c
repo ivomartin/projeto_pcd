@@ -14,24 +14,33 @@ int main(int argc, char **argv) {
 
     int N = atoi(argv[1]);
     int K = atoi(argv[2]);
-    srand(42); // Semente fixa para resultados iguais sempre
 
-    // 1. Gerar DADOS
+    // Se N ou K forem 0 (erro de argumento), avisa
+    if (N <= 0 || K <= 0) {
+        // Silencioso para não poluir o terminal se chamado errado, mas não gera nada
+        return 0; 
+    }
+
+    srand(42); 
+
+    // 1. DADOS
     FILE *f_data = fopen("dados.csv", "w");
+    if(!f_data) return 1;
     for (int i = 0; i < N; i++) {
-        // Cria clusters a cada 50.0 unidades
         double center = (rand() % K) * 50.0; 
         fprintf(f_data, "%.4f\n", center + rand_double(-10.0, 10.0));
     }
     fclose(f_data);
+    printf("Gerado: dados.csv (%d linhas) ", N);
 
-    // 2. Gerar CENTRÓIDES INICIAIS
+    // 2. CENTRÓIDES
     FILE *f_cent = fopen("centroides_iniciais.csv", "w");
+    if(!f_cent) return 1;
     for (int i = 0; i < K; i++) {
         fprintf(f_cent, "%.4f\n", rand_double(0, K * 50.0));
     }
     fclose(f_cent);
+    printf("e centroides_iniciais.csv (%d linhas)\n", K);
 
-    printf("Gerado: dados.csv (%d linhas) e centroides_iniciais.csv (%d linhas)\n", N, K);
     return 0;
 }
