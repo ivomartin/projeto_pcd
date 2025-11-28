@@ -1,4 +1,3 @@
-cat << 'EOF' > rodar_bateria_testes.sh
 #!/bin/bash
 
 RESULTADOS_CSV="resultados_completo.csv"
@@ -45,7 +44,7 @@ N_FIXO=1000000 # 1 Milhão
 K_FIXO=16
 
 # testing with 1, 2, 3 e 4 process ( can add more )
-for P in 1 2 3 4; do
+for P in 1 2 3 4 8 16 32 64; do
     executar "Escalabilidade" $N_FIXO $K_FIXO $P
 done
 
@@ -54,7 +53,7 @@ K_FIXO=16
 P_FIXO=4 
 
 # De 100 mil até 2 Milhões
-for N in 100000 500000 1000000 1500000 2000000; do
+for N in 100000 500000 1000000 1500000 2000000 3000000 5000000; do
     executar "Variacao_N" $N $K_FIXO $P_FIXO
 done
 
@@ -63,11 +62,10 @@ N_FIXO=500000
 P_FIXO=4
 
 # 4, 16, 32, 64, 128 clusters
-for K in 4 16 32 64 128; do
+for K in 4 16 32 64 128 160 200 220; do
     executar "Variacao_K" $N_FIXO $K $P_FIXO
 done
 
 echo "============================================================"
 echo "Bateria concluída!"
 echo "Resultados salvos em: $RESULTADOS_CSV"
-EOF
