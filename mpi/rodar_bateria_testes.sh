@@ -28,7 +28,7 @@ executar() {
     ./gerar_dados $N $K > /dev/null
 
     # runs mpi and gets the output
-    SAIDA=$(mpirun --allow-run-as-root -np $P ./kmeans_1d_mpi dados.csv centroides_iniciais.csv)
+    SAIDA=$(mpirun --allow-run-as-root --oversubscribe -np $P ./kmeans_1d_mpi dados.csv centroides_iniciais.csv)
 
     # extract data
     LINHA=$(echo "$SAIDA" | grep "Fim:")
